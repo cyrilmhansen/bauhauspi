@@ -337,7 +337,15 @@ def draw_optional_digit(
         ctx.show_text(str(digit))
 
 
-def draw_poster_with_cairo(draw_digits: bool = False, digit_font: str = "inter", safe_margin_mm: float = DEFAULT_SAFE_MARGIN_MM) -> None:
+def draw_poster_with_cairo(
+    draw_digits: bool = False,
+    digit_font: str = "inter",
+    safe_margin_mm: float = DEFAULT_SAFE_MARGIN_MM,
+    bleed_mm: float = 0.0,
+) -> None:
+    bleed_px = int(round(mm_to_px(bleed_mm)))
+    canvas_w = WIDTH_PX + 2 * bleed_px
+    canvas_h = HEIGHT_PX + 2 * bleed_px
     margin_x = max(WIDTH_PX * MARGIN_RATIO, mm_to_px(safe_margin_mm))
     margin_y = max(HEIGHT_PX * MARGIN_RATIO, mm_to_px(safe_margin_mm))
     inner_w = WIDTH_PX - 2 * margin_x
@@ -348,6 +356,9 @@ def draw_poster_with_cairo(draw_digits: bool = False, digit_font: str = "inter",
     def render_to_context(ctx: "cairo.Context") -> None:
         ctx.set_source_rgb(*PALETTE["cream"])
         ctx.paint()
+
+        ctx.save()
+        ctx.translate(bleed_px, bleed_px)
 
         for c in cells:
             size = c.base * digit_scale(c.digit)
@@ -377,15 +388,16 @@ def draw_poster_with_cairo(draw_digits: bool = False, digit_font: str = "inter",
         ctx.set_source(grad)
         ctx.rectangle(0, y0, WIDTH_PX, fade_h)
         ctx.fill()
+        ctx.restore()
 
     out_base = "pi_bauhaus_poster" if not draw_digits else f"pi_bauhaus_poster_{digit_font}"
 
-    svg_surface = cairo.SVGSurface(f"{out_base}.svg", WIDTH_PX, HEIGHT_PX)
+    svg_surface = cairo.SVGSurface(f"{out_base}.svg", canvas_w, canvas_h)
     svg_ctx = cairo.Context(svg_surface)
     render_to_context(svg_ctx)
     svg_surface.finish()
 
-    png_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH_PX, HEIGHT_PX)
+    png_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, canvas_w, canvas_h)
     png_ctx = cairo.Context(png_surface)
     render_to_context(png_ctx)
     png_surface.write_to_png(f"{out_base}.png")
@@ -395,6 +407,7 @@ def draw_poster_with_matplotlib(
     draw_digits: bool = False,
     digit_font: str = "inter",
     safe_margin_mm: float = DEFAULT_SAFE_MARGIN_MM,
+    bleed_mm: float = 0.0,
 ) -> None:  # pragma: no cover
     import matplotlib
 
@@ -404,24 +417,30 @@ def draw_poster_with_matplotlib(
     import numpy as np
     from matplotlib.patches import Circle, Polygon, Rectangle, Wedge
 
+    bleed_px = int(round(mm_to_px(bleed_mm)))
+    canvas_w = WIDTH_PX + 2 * bleed_px
+    canvas_h = HEIGHT_PX + 2 * bleed_px
+    x_offset = float(bleed_px)
+    y_offset = float(bleed_px)
+
     margin_x = max(WIDTH_PX * MARGIN_RATIO, mm_to_px(safe_margin_mm))
     margin_y = max(HEIGHT_PX * MARGIN_RATIO, mm_to_px(safe_margin_mm))
     inner_w = WIDTH_PX - 2 * margin_x
     inner_h = HEIGHT_PX - 2 * margin_y
     cells = build_cells(margin_x, margin_y, inner_w, inner_h)
 
-    fig = plt.figure(figsize=(WIDTH_MM / MM_PER_INCH, HEIGHT_MM / MM_PER_INCH), dpi=DPI)
+    fig = plt.figure(figsize=(canvas_w / DPI, canvas_h / DPI), dpi=DPI)
     ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, WIDTH_PX)
-    ax.set_ylim(HEIGHT_PX, 0)
+    ax.set_xlim(0, canvas_w)
+    ax.set_ylim(canvas_h, 0)
     ax.set_aspect("equal")
     ax.axis("off")
     fig.patch.set_facecolor(PALETTE["cream"])
     ax.set_facecolor(PALETTE["cream"])
 
     for c in cells:
-        cx = c.cx
-        cy = c.cy
+        cx = c.cx + x_offset
+        cy = c.cy + y_offset
         size = c.base * digit_scale(c.digit)
         color = digit_color(c.digit, c.index)
         if c.digit <= 2:
@@ -472,8 +491,8 @@ def draw_poster_with_matplotlib(
                 )
 
     ax.text(
-        WIDTH_PX / 2,
-        HEIGHT_PX * 0.44,
+        x_offset + WIDTH_PX / 2,
+        y_offset + HEIGHT_PX * 0.44,
         "π",
         ha="center",
         va="center",
@@ -484,12 +503,12 @@ def draw_poster_with_matplotlib(
     )
 
     fade_h = (BOTTOM_FADE_CM * 10.0 / MM_PER_INCH) * DPI
-    y0 = HEIGHT_PX - fade_h
+    y0 = y_offset + HEIGHT_PX - fade_h
     n = 256
     alpha = np.linspace(0.0, 0.42, n).reshape(n, 1)
     rgba = np.ones((n, 1, 4), dtype=float)
     rgba[:, :, 3] = alpha
-    ax.imshow(rgba, extent=(0, WIDTH_PX, HEIGHT_PX, y0), origin="upper", interpolation="bicubic", zorder=20)
+    ax.imshow(rgba, extent=(x_offset, x_offset + WIDTH_PX, y_offset + HEIGHT_PX, y0), origin="upper", interpolation="bicubic", zorder=20)
 
     out_base = "pi_bauhaus_poster" if not draw_digits else f"pi_bauhaus_poster_{digit_font}"
     fig.savefig(f"{out_base}.svg", format="svg", dpi=DPI)
@@ -519,6 +538,12 @@ def main() -> None:
         default=DEFAULT_SAFE_MARGIN_MM,
         help="White safety margin on each side for borderless print compensation (default: 2.0 mm).",
     )
+    parser.add_argument(
+        "--bleed-mm",
+        type=float,
+        default=0.0,
+        help="Extra canvas size (each side) to extend beyond A3+ trim (default: 0.0 mm).",
+    )
     args = parser.parse_args()
 
     fonts = list(FONT_PRESETS.keys()) if (args.draw_digits and args.digit_font == "all") else [args.digit_font]
@@ -530,12 +555,14 @@ def main() -> None:
                 draw_digits=args.draw_digits,
                 digit_font=font,
                 safe_margin_mm=max(0.0, args.safe_margin_mm),
+                bleed_mm=max(0.0, args.bleed_mm),
             )
         else:
             draw_poster_with_matplotlib(
                 draw_digits=args.draw_digits,
                 digit_font=font,
                 safe_margin_mm=max(0.0, args.safe_margin_mm),
+                bleed_mm=max(0.0, args.bleed_mm),
             )
         if args.draw_digits:
             generated.extend([f"pi_bauhaus_poster_{font}.svg", f"pi_bauhaus_poster_{font}.png"])
