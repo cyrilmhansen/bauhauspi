@@ -22,6 +22,11 @@ Create a high-resolution A3+ generative poster from Pi decimals, with a strict B
 - Verified indexing and corrected the Feynman highlight offset.
 - Final Feynman location uses decimal index `761..766` (zero-based on the decimal stream) for `999999`.
 
+### Feynman Point Placement
+- The Feynman block is **not manually placed** at the center.
+- Position is an emergent result of sequential mapping (left-to-right, top-to-bottom) from the Pi stream into the poster cells.
+- The visual emphasis (gold fill + larger/outlined label style) is intentional, but the XY placement comes from data order, not an explicit centering rule.
+
 ### 4) Typography Iterations
 - Added font presets for labels: `inter`, `jetbrains-mono`, `sans`.
 - Switched Feynman labels to high-contrast white with black contour only.
