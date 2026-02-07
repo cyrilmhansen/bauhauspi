@@ -26,6 +26,7 @@ HEIGHT_MM = 483
 WIDTH_PX = round(WIDTH_MM / MM_PER_INCH * DPI)
 HEIGHT_PX = round(HEIGHT_MM / MM_PER_INCH * DPI)
 BOTTOM_FADE_CM = 2.0
+DEFAULT_SAFE_MARGIN_MM = 2.0
 
 GRID_COLS = 30
 GRID_ROWS = 50
@@ -91,6 +92,10 @@ def get_pi_digits(n_decimal_digits: int) -> str:
     if len(decimals) < n_decimal_digits:
         raise ValueError("Not enough computed digits of Pi.")
     return decimals[:n_decimal_digits]
+
+
+def mm_to_px(mm: float) -> float:
+    return (mm / MM_PER_INCH) * DPI
 
 
 def digit_color(digit: int, index: int) -> tuple[float, float, float]:
@@ -332,9 +337,9 @@ def draw_optional_digit(
         ctx.show_text(str(digit))
 
 
-def draw_poster_with_cairo(draw_digits: bool = False, digit_font: str = "inter") -> None:
-    margin_x = WIDTH_PX * MARGIN_RATIO
-    margin_y = HEIGHT_PX * MARGIN_RATIO
+def draw_poster_with_cairo(draw_digits: bool = False, digit_font: str = "inter", safe_margin_mm: float = DEFAULT_SAFE_MARGIN_MM) -> None:
+    margin_x = max(WIDTH_PX * MARGIN_RATIO, mm_to_px(safe_margin_mm))
+    margin_y = max(HEIGHT_PX * MARGIN_RATIO, mm_to_px(safe_margin_mm))
     inner_w = WIDTH_PX - 2 * margin_x
     inner_h = HEIGHT_PX - 2 * margin_y
 
@@ -386,7 +391,11 @@ def draw_poster_with_cairo(draw_digits: bool = False, digit_font: str = "inter")
     png_surface.write_to_png(f"{out_base}.png")
 
 
-def draw_poster_with_matplotlib(draw_digits: bool = False, digit_font: str = "inter") -> None:  # pragma: no cover
+def draw_poster_with_matplotlib(
+    draw_digits: bool = False,
+    digit_font: str = "inter",
+    safe_margin_mm: float = DEFAULT_SAFE_MARGIN_MM,
+) -> None:  # pragma: no cover
     import matplotlib
 
     matplotlib.use("Agg")
@@ -395,8 +404,8 @@ def draw_poster_with_matplotlib(draw_digits: bool = False, digit_font: str = "in
     import numpy as np
     from matplotlib.patches import Circle, Polygon, Rectangle, Wedge
 
-    margin_x = WIDTH_PX * MARGIN_RATIO
-    margin_y = HEIGHT_PX * MARGIN_RATIO
+    margin_x = max(WIDTH_PX * MARGIN_RATIO, mm_to_px(safe_margin_mm))
+    margin_y = max(HEIGHT_PX * MARGIN_RATIO, mm_to_px(safe_margin_mm))
     inner_w = WIDTH_PX - 2 * margin_x
     inner_h = HEIGHT_PX - 2 * margin_y
     cells = build_cells(margin_x, margin_y, inner_w, inner_h)
@@ -504,6 +513,12 @@ def main() -> None:
         default="all",
         help="Font preset for tiny digit labels. Default: build all variants.",
     )
+    parser.add_argument(
+        "--safe-margin-mm",
+        type=float,
+        default=DEFAULT_SAFE_MARGIN_MM,
+        help="White safety margin on each side for borderless print compensation (default: 2.0 mm).",
+    )
     args = parser.parse_args()
 
     fonts = list(FONT_PRESETS.keys()) if (args.draw_digits and args.digit_font == "all") else [args.digit_font]
@@ -511,9 +526,17 @@ def main() -> None:
     generated: list[str] = []
     for font in fonts:
         if cairo is not None:
-            draw_poster_with_cairo(draw_digits=args.draw_digits, digit_font=font)
+            draw_poster_with_cairo(
+                draw_digits=args.draw_digits,
+                digit_font=font,
+                safe_margin_mm=max(0.0, args.safe_margin_mm),
+            )
         else:
-            draw_poster_with_matplotlib(draw_digits=args.draw_digits, digit_font=font)
+            draw_poster_with_matplotlib(
+                draw_digits=args.draw_digits,
+                digit_font=font,
+                safe_margin_mm=max(0.0, args.safe_margin_mm),
+            )
         if args.draw_digits:
             generated.extend([f"pi_bauhaus_poster_{font}.svg", f"pi_bauhaus_poster_{font}.png"])
         else:
